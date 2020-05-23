@@ -1,0 +1,394 @@
+---
+title: "Explorando el Caso Banco Portugues - Bank Marketing"
+author: "Nestor Montano | SEE"
+date: "22 de mayo de 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Caso Banco Portugues - Bank Marketing
+
+
+Se ha producido una disminución de ingresos para el Banco Portugués y les gustaría saber qué medidas tomar. Después de la investigación se descubre que la causa principal es que sus clientes no están depositando con tanta frecuencia como antes. Además, se conoce que:
+
+Los depósitos a plazo permiten a los bancos retener un depósito por un período de tiempo específico, de tal manera que el banco invierta en productos financieros de mayor ganancia y que además,  
+Hay más posibilidad de persuadir a un clientes con depósito a plazo para que compre otro productos como fondos o seguros y así aumentar aún más el ingreso del banco. El Banco Portugués decide entonces hacer una campaña para promover depósitos a plazo, para ello su departamento de inteligencia debe **identificar a los clientes existentes que tienen mayores posibilidades de suscribirse a un depósito a plazo** y de esta manera enfocar el esfuerzo de marketing en dichos clientes
+
+
+Fuente: [Moro et al., 2014] S. Moro, P. Cortez and P. Rita. A Data-Driven Approach to Predict the Success of Bank Telemarketing. Decision Support Systems, Elsevier, 62:22-31, June 2014
+
+
+
+**Variables socio demográficas**
+
+* y: ¿el cliente ha suscrito un depósito a plazo?  ('yes','no')  
+* age: Edad, 
+* job: trabajo ('admin.', 'blue-collar', 'entrepreneur', 'housemaid', 'management', 'retired', 'self-employed', 'services', 'student', 'technician', 'unemployed', 'unknown'), 
+* marital: estado civil  ('divorced','married','single','unknown'; note: 'divorced' means divorced or widowed), 
+* education: nivel educativo: ('basic.4y', 'basic.6y', 'basic.9y', 'high.school', 'illiterate', 'professional.course', 'university.degree', 'unknown')
+* default: ¿ha caído en mora? ('no','yes','unknown')
+* housing: ¿tiene préstamo para vivienda? ('no','yes','unknown')
+* loan: ¿tiene prestamo personal?   
+
+
+**Variables de último contacto de la presente campaña**  
+
+* contact: tipo de comunicación de contacto ('cellular', 'telephone')  
+* month, day_of_week  
+* duration: duración del último contacto, en segundos **Leer nota**  
+* campaign: número de contactos realizados durante esta campaña y para este cliente  
+* pdays: número de días que pasaron después de que el cliente fue contactado por última vez desde una campaña anterior (numérico; 999 significa que el cliente no fue contactado previamente)  
+* previous: número de contactos realizados antes de esta campaña y para este cliente  
+* poutcome: resultado de la campaña de marketing anterior ('failure','nonexistent','success')  
+* emp.var.rate: tasa de variación del empleo - indicador trimestral   
+* cons.price.idx: índice de precios al consumidor - indicador mensual   
+* cons.conf.idx:  índice de confianza del consumidor - indicador mensual   
+* euribor3m: euribor tasa de 3 meses - indicador diario  
+* nr.employed:  número de empleados - indicador trimestral   
+
+
+
+
+## Preeliminares
+
+
+### Paquetes
+
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr) # manipulacion datos
+library(tidyr) # manipulacion datos 2
+library(magrittr) # Pipe %>%
+library(readr) # Importar csv
+library(ggplot2) # Gráficos
+library(lubridate) # Manipular fechas
+library(cowplot) # Grid de Gráficos
+library(scales) # Escalas en los gráficos
+library(purrr) # mapear funciones a las columnas 
+```
+
+
+### Importacion de la data
+
+
+```{r}
+# read_delim : Leer el archivo csv (prueben con read_csv también)
+data_banco <- read_delim("Data/bank-additional-full.csv", delim= ";")
+head(data_banco)
+```
+
+
+
+### Entender la data
+
+
+```{r}
+# str(data_publicidad) # Opcion de R-base
+# glimpse permite ver tipos de variables
+glimpse(data_banco)
+```
+
+
+### Variables a transformar
+
+Se debe transformar la variable **y** a factor, primero vemos los valores que tiene la variable (aunque presuponemos que sea "yes" y "no")
+
+```{r}
+# %$% : Pipe para enviar una columna al otro comando
+# Unique : permite obtener valores únicos
+data_banco %$% unique(y) # Unique de la columna "y"
+```
+
+Ahora los labels serán "si" y "no" respectivamente, es un **factor no ordenado**
+
+```{r}
+# %<>% : Pipe que permite calcular todo y guardarlo en la variable de la izquierda.
+# Convertir a factor
+data_banco %<>% 
+  mutate( y = factor(y, 
+                     levels= c("yes","no"), 
+                     labels= c("si", "no")) ) 
+# Verificar
+# str : ver la estructura de la variable
+data_banco %$% str(y)
+```
+
+
+Vemos que se debe transformar la variable **education** a factor, esta vez es un **factor ordenado**, primero exploremos los datos que tiene.
+
+```{r}
+# %$% : Pipe para enviar una columna al otro comando
+# Unique : permite obtener valores únicos
+data_banco %$% unique(education) # Unique de la columna "y"
+```
+
+Se convierte en **factor ordenado** y además se lo pone en español.
+
+```{r}
+# Convertir a factor
+data_banco %<>% 
+  mutate( education = factor( education, 
+                     levels= c("illiterate", "basic.4y", "basic.6y", 
+                               "basic.9y", "high.school",  "professional.course",
+                               "university.degree", "unknown" ), 
+                     labels= c("No Educ.", "4A Bas.", "6A Bas.",
+                               "9A Bas.", "Bachill.", "Tecnico",
+                               "Univer.", "Descon.") , 
+                     ordered = TRUE)  ) 
+# Verificar
+# str : ver la estructura de la variable
+data_banco %$% str(education)
+```
+
+
+El mismo trabajo se debe hacer con las variables **month** y **day_of_week**
+
+```{r}
+# %$% : Pipe para enviar una columna al otro comando
+# Unique : permite obtener valores únicos
+data_banco %$% unique(month) 
+data_banco %$% unique(day_of_week) 
+```
+
+Se convierte en **factor ordenado** y además se lo pone en español.
+
+```{r}
+# Convertir a factor
+data_banco %<>% 
+  mutate( month = factor( month, 
+                     levels= c("mar", "apr", "may", "jun", "jul", 
+                               "aug", "sep", "oct", "nov", "dec" ), 
+                     labels= c("Mar", "Abr", "May", "Jun", "Jul", 
+                               "Ago", "Sep", "Oct", "Nov", "Dec" ), 
+                     ordered = TRUE),
+          day_of_week = factor( day_of_week, 
+                     levels= c("mon", "tue", "wed", "thu", "fri" ), 
+                     labels= c("Lun", "Mar", "Mie", "Jue", "Vie" ), 
+                     ordered = TRUE),
+          ) 
+# Verificar
+# str : ver la estructura de la variable
+data_banco %$% str(month)
+data_banco %$% str(day_of_week)
+
+```
+
+
+
+
+## EDA Análisis Exploratorio de Datos
+
+Una de las primeras cosas que se debe realizar es ver cuántos datos únicos tiene cada variable, esto debido a que una vairable que tenga siempre el mismo valor no aporta en el estudio.
+
+```{r}
+data_banco %>% 
+  map_df(.f =  function(x) length(unique(x))) %>%  # Contar valores únicos por variable
+  gather(value = "NumValoresUnicos", key = "Variable") %>%  # pasar de horizontal a vertical
+  arrange(NumValoresUnicos)
+```
+
+Otra cosa a revisar son la cantidad de datos en cada nivel de las variables categóricas, esto para poder agrupar niveles en un nivel genérico tipo "otros"; probemos con la variable **job**
+
+```{r}
+data_banco %>% 
+  group_by(job) %>% 
+  summarise( Frecuencia= n()) %>% 
+  arrange(-Frecuencia)
+```
+
+La vairable trabajo no parece tener niveles que puedan ser agrupados. Podríamos hacer una **exploración rápida** con:
+
+```{r}
+summary(data_banco)
+```
+
+
+Recordemos que el objetivo al final es **identificar a los clientes existentes que tienen mayores posibilidades de suscribirse a un depósito a plazo**, por lo que vamos a empezar a hacernos preguntas que nos permitan entender el problema.  
+
+**¿Incíde el índice de precios al consumidor?**   
+Para empezar se va a comparar el índice de precios al consumidor versus si el cliente ha suscrito un depósito a plazo, para ello vamos a realizar una tabla que resuma algunas estadísticas básicas poren función de `y`.
+
+```{r}
+data_banco %>% 
+  group_by(y) %>% 
+  summarise(
+    Freq= n(),
+    Min= min(cons.price.idx, na.rm = T),
+    Q25= quantile(cons.price.idx, probs = 0.25),
+    Media= mean(cons.price.idx, na.rm = T), 
+    Media_Acotada= median(cons.price.idx, trim = 0.05, na.rm = T), 
+    Mediana= mean(cons.price.idx), 
+    Q75= quantile(cons.price.idx, probs = 0.75),
+    Max= max(cons.price.idx, na.rm = T)
+            ) 
+
+```
+Ahora se explorará gráficamente con un boxplot.
+
+```{r echo=TRUE, fig.align='center'}
+ggplot(data_banco, aes(y, cons.price.idx)) + 
+  geom_boxplot(aes(fill = y)) +
+  labs(title = "Boxplot Indice consumidor vs adquiere préstamo",
+      x= "Adquiere prestamo")
+
+```
+
+La distribución del índice cuando no se tiene el préstamo tiene una mediana mayor que cuando sí, sin embargo los cuartiles no muestran mayor diferencia.  
+
+Podríamos ahora analizar todos los índices a la vez a través de un gráfico compuesto, para esto haremos varios gráficos que guardaremos en objetos de R y con ellos construiremos un gráfico compuesto usando el comando plot_grid
+
+```{r echo=TRUE, fig.align='center'}
+plot_consprice <- ggplot(data_banco, aes(y, cons.price.idx)) + 
+  geom_boxplot(aes(fill = y)) +
+  labs(title = "Boxplot Indice consumidor \n vs adquiere dep.plazo",
+       x= "Adquiere prestamo")
+plot_consconf <- ggplot(data_banco, aes(y, cons.conf.idx)) + 
+  geom_boxplot(aes(fill = y)) +
+  labs(title = "Boxplot Confianza consumidor \n vs adquiere dep.plazo",
+       x= "Adquiere prestamo")
+plot_euribor3m <- ggplot(data_banco, aes(y, euribor3m)) + 
+  geom_boxplot(aes(fill = y)) +
+  labs(title = "Boxplot tasa euribor \n vs adquiere dep.plazo",
+       x= "Adquiere prestamo")
+plot_employed <- ggplot(data_banco, aes(y, nr.employed)) + 
+  geom_boxplot(aes(fill = y)) +
+  labs(title = "Boxplot Numero empleados \n vs adquiere dep.plazo",
+       x= "Adquiere prestamo")
+
+```
+
+
+```{r echo=TRUE, fig.align='center'}
+# Grafico compuesto
+plot_grid(plot_consprice, plot_consconf, plot_euribor3m, plot_employed, nrow = 2, ncol= 2)
+```
+
+Para todos los índices se muestra un comportamiento parecido al anterior, es decir, la distribución del índice cuando no se tiene el préstamo tiene una mediana mayor que cuando sí (excepto en índice de confianza), sin embargo los cuartiles no muestran mayor diferencia, en la variable que sí se ven diferencias es en el **número de empleados** donde la mediana para los que no adquieron el depósito a plazo es casi igual al cuartil 3 de los que sí lo cogen.
+
+
+
+**¿La edad está relacionada con la aceptación o no del depósito a plazo?**
+
+Así como en el caso anterior, empezaremos con una tabla de estadísticas descriptivas.
+
+```{r}
+data_banco %>% 
+  group_by(y) %>% 
+  summarise(
+    Q25= quantile(age, probs = 0.25),
+    Media= mean(age), 
+    Media_Acotada= median(age, trim = 0.05), 
+    Mediana= mean(age), 
+    Q75= quantile(age, probs = 0.75)
+            ) 
+
+```
+
+Y ahora haremos un histograma, escogeremos 10 como el ancho del intervalo.
+
+```{r}
+ggplot(data_banco, aes(age)) + 
+  geom_histogram(aes(fill = y), binwidth = 10) + 
+  labs( x= 'Edad', y= 'Porcentaje', title= 'Histograma de la cantidad de personas que \n aceptan el deposito según la edad', fill= 'Suscribe \n deposito')
+```
+
+Pero el gráfico propuesto no permite ver bien si la edad tiene relación con la aceptación, veamos el gráfico en forma de proporción:
+
+```{r}
+ggplot(data_banco, aes(age)) + 
+  geom_histogram(aes(fill = y), binwidth = 10, position = 'fill') + 
+  labs( x= 'Edad', y= 'Porcentaje', title= 'Histograma de la proporcion aceptar deposito vs edad', fill= 'Suscribe \n deposito')
+```
+
+
+**¿Afecta el trabajo a la aceptación de un depósito?**
+
+Empezaremos con una tabla de estadísticas descriptivas, en este caso estamos hablando de dos variables cualitativas, por lo que empezaremos con una tabla de contingencia.
+
+```{r}
+data_banco %$% 
+  table(job, y) %>% 
+  prop.table() %>% 
+  round(digits = 4) * 100
+
+```
+
+Pero veamos si los porcentajes de los que toman el depósito a plazo o no, varían según el trabajo
+
+```{r}
+data_banco %$% 
+  table(job, y) %>% 
+  prop.table(margin = 1) %>% 
+  round(digits = 4) * 100
+
+```
+
+Y ahora un gráfico de barras:
+
+```{r}
+ggplot(data_banco, aes(job)) + 
+  geom_bar(aes(fill = y), position = 'fill') + 
+  coord_flip() +
+  labs( x= 'Trabajo', y= 'Porcentaje', title= 'Proporcion aceptar deposito vs trabajo', fill= 'Suscribe \n deposito') +
+  scale_y_continuous(labels = percent)
+```
+
+Interesante ver que los estudiantes y los retirados son los que tienen más propensión a aceptar el depósito a plazo.
+
+
+**Exploremos los días desde el último contacto**
+
+Haremos un histograma de la variable días desde el último contacto:
+
+```{r}
+ggplot(data_banco, aes(pdays)) + 
+  geom_histogram( binwidth = 10) + 
+  labs( x= 'Dias desde ultimo contacto', y= 'Porcentaje', title= 'Histograma de dias desde ultimo contacto')
+```
+Como el "999" significaba "no contactado", se repite el histograma sin este valor
+
+```{r}
+ggplot(data_banco %>% filter(pdays!=999), aes(pdays)) + 
+  geom_histogram( binwidth = 2) + 
+  labs( x= 'Dias desde ultimo contacto', y= 'Porcentaje', title= 'Histograma de dias desde ultimo contacto')
+```
+
+**pDays** como variable en un modelamiento no nos será útil, vamos a crear una nueva variable que indique si fue contactado o no.
+
+```{r}
+data_banco %<>% 
+  mutate(pdays_binaria = ifelse(pdays==999, "No", "Si"))
+
+data_banco %$% 
+  table(pdays_binaria)
+```
+
+
+
+**A modo de ejemplo, exploremos la cantidad de llamadas y la tasa eurobor3m vs poseer casa y aceptar depósito**
+
+
+```{r}
+ggplot(data_banco, aes(euribor3m)) + 
+  geom_histogram(aes(fill = y), binwidth = 1) + facet_grid(housing~. ) + 
+  labs( x= 'Tasa Eurobor', y= 'Cantidad de llamadas', title= 'Histograma de cantidad de llamadas \n según posesión de casa', fill= 'Suscribe \n deposito')
+```
+
+Ahora en porcentaje
+
+
+```{r}
+ggplot(data_banco, aes(euribor3m)) + 
+  geom_histogram(aes(fill = y), binwidth = 1, position = 'fill') + facet_grid(housing~. ) + 
+  labs( x= 'Tasa Eurobor', y= 'Porcentaje', title= 'Histograma de la proporcion aceptar deposito vs Tasa Eurobor', fill= 'Suscribe \n deposito')
+```
+
+## Tú turno
+
+**Ejercicio 1: Explorar el estado civil versus el aceptar o no un depósito**   
+
+**Ejercicio 2: Asumamos que nos interesa analizar la duración de la llamada, explore la variable sola y en función de la edad**
+
